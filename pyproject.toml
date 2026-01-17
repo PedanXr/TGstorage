@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tgstorage-cluster"
+version = "1.0.0"
+authors = [
+  { name="DraxonV1" },
+]
+description = "A lightweight, high-performance file storage API using Telegram as a backend."
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-dotenv",
+    "httpx",
+    "aiosqlite",
+    "pydantic",
+    "pydantic-settings",
+    "python-telegram-bot"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/DraxonV1/tgstorage"
+"Bug Tracker" = "https://github.com/DraxonV1/tgstorage/issues"
+
+[project.scripts]
+tgstorage = "tgstorage.main:main"
+tgstorage-key = "tgstorage.generate_key:cli_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tgstorage = ["index.html", "mime.types", "nginx_production.conf"]
