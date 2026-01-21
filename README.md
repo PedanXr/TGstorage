@@ -3,76 +3,386 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=for-the-badge&logo=fastapi)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
-![Developer](https://img.shields.io/badge/Developer-DraxonV1-orange?style=for-the-badge)
 
-A lightweight, high-performance file storage API that transforms Telegram into an infinite, scalable backend. 
+**TG Storage Cluster** transforms Telegram into your personal, unlimited, and free cloud storage backend. By leveraging a "cluster" of Telegram bots, it distributes upload traffic to bypass rate limits and provides a high-performance HTTP API for uploading and streaming files.
+
+## ✨ Features
+
+-   **Infinite Storage**: Leveraging Telegram's unlimited cloud storage.
+-   **Bot Clustering**: Automatically load balances uploads across multiple bots to maximize speed and avoid rate limits.
+-   **Streaming Support**: Native HTTP Range requests support (seekable video/audio).
+-   **Proxy Support**: Built-in SOCKS/HTTP proxy support for bots (useful for hosting in restricted regions).
+-   **Web Dashboard**: Includes a simple drag-and-drop UI for managing files.
+-   **Production Ready**: Async architecture powered by FastAPI and Uvicorn.
 
 ---
 
-## 🚀 Installation
+## 🚀 Quick Start (5 Minutes)
 
-Install the package directly via pip:
+### 1. Prerequisites
+-   Python 3.10 or higher.
+-   A Telegram account.
 
+### 2. Create Your Bots
+1.  Message [@BotFather](https://t.me/BotFather) on Telegram.
+2.  Create new bots using `/newbot`.
+3.  **Tip**: Create at least 3-5 bots for better performance.
+4.  Save the **API Token** for each bot.
+
+### 3. Create a Storage Channel
+1.  Create a **Private Channel** in Telegram.
+2.  Add **ALL** your bots as **Administrators** to this channel (needed to upload files).
+3.  **Get the Channel ID**:
+    *   Forward any message from your new channel to [@JsonDumpBot](https://t.me/JsonDumpBot).
+    *   Copy the `id` value (e.g., `-1001234567890`).
+
+### 4. Installation
 ```bash
 pip install tgstorage-cluster
 ```
 
-## 🛠️ Setup & Usage
+### 5. Configuration
+Create a project folder and add two files:
 
-### 1. Configuration
-The package looks for a `.env` file and a `tokens.txt` file in your **current working directory**.
-
-1. Create a `.env` file:
+**File 1: `.env`** (Configuration)
 ```env
-API_ID=your_id
-API_HASH=your_hash
-CHANNEL_ID=your_channel_id
-ADMIN_API_KEY=your_secret_key
-BASE_URL=http://localhost
+# Required
+CHANNEL_ID=-100xxxxxxxxxx      # Your Channel ID
+ADMIN_API_KEY=my_secure_pass   # Master password for the API/Dashboard
+
+# Server Config
+HOST=0.0.0.0
+PORT=8082
+BASE_URL=https://your-domain.com  # Public URL (for generating share links)
+
+# Optional Proxy Config (if running on a restricted server)
+# PROXY_HOST=127.0.0.1
+# PROXY_PORT=1080
+# PROXY_USER=user
+# PROXY_PASS=pass
 ```
 
-2. Create a `tokens.txt` file and add your bot tokens (one per line).
+**File 2: `tokens.txt`** (Bot Tokens)
+Paste your bot tokens, one per line:
+```text
+123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+987654321:ZYXwvuTSRqponMLKjihgfeDCBA
+```
 
-### 2. Run the Server
-You can start the storage server using the built-in CLI command:
-
+### 6. Run It
 ```bash
 tgstorage
 ```
-The server will start on `http://localhost:8082`.
 
-### 3. Generate API Keys
-Manage your client keys using the management CLI:
+---
 
+## 📡 API Documentation & Usage Examples
+
+**Base URL**: `http://your-server-ip:8082` (or your domain)
+**Authentication**: Add header `X-API-Key: your_key` or query param `?key=your_key`.
+
+### 1. Upload File
+**Endpoint**: `POST /upload`
+**Content-Type**: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `file` | File | Yes | The binary file to upload. |
+| `expiration_days` | Int | No | Auto-delete after X days. |
+| `password` | Str | No | Password protect the download link. |
+
+**Example (cURL)**:
 ```bash
-tgstorage-key --owner "MyWebApp"
+curl -X POST "http://127.0.0.1:8082/upload" \
+     -H "X-API-Key: my_secure_pass" \
+     -F "file=@/path/to/video.mp4" \
+     -F "expiration_days=7"
+```
+
+**Response**:
+```json
+{
+  "status": "success",
+  "file_id": "BQACAgQAAx0C...",
+  "direct_link": "https://your-domain.com/dl/BQACAgQAAx0C.../video.mp4",
+  "share_link": "https://your-domain.com/share/v7f897s9f7s98f7"
+}
+```
+
+### 2. Download / Stream File
+**Endpoint**: `GET /dl/{file_id}/{filename}` or `/f/{file_id}/{filename}`
+**Auth**: Not required (unless password protected).
+
+-   **Supports**: HTTP Range requests (seekable video/audio).
+-   **Password**: If file has a password, add `?password=YOUR_PASS` to the URL.
+
+**Example**:
+```bash
+# Direct download
+wget "http://127.0.0.1:8082/dl/BQACAgQAAx0C.../video.mp4"
+
+# With password
+wget "http://127.0.0.1:8082/dl/BQACAgQAAx0C.../video.mp4?password=12345"
+```
+
+### 3. List Files
+**Endpoint**: `GET /files`
+
+**Query Parameters**:
+-   `limit` (default: 50)
+-   `offset` (default: 0)
+-   `search` (optional filter)
+
+**Example (cURL)**:
+```bash
+curl "http://127.0.0.1:8082/files?limit=10&search=movie" \
+     -H "X-API-Key: my_secure_pass"
+```
+
+### 4. System Stats
+**Endpoint**: `GET /stats`
+
+Returns total storage usage, file count, and views.
+
+**Example (cURL)**:
+```bash
+curl "http://127.0.0.1:8082/stats" -H "X-API-Key: my_secure_pass"
+```
+
+### 5. Delete File
+**Endpoint**: `DELETE /file/{file_id}`
+
+Deletes file from Database AND Telegram Channel.
+
+**Example (cURL)**:
+```bash
+curl -X DELETE "http://127.0.0.1:8082/file/BQACAgQAAx0C..." \
+     -H "X-API-Key: my_secure_pass"
 ```
 
 ---
 
-## 📦 Integration in your Python Code
+## 🏢 Production Deployment Guide
 
-You can use the cluster logic directly in your own projects without running the FastAPI server:
+For production, **never** use `python -m uvicorn` directly. Use a process manager like **Systemd** and a reverse proxy like **Nginx**.
+
+### 1. Setup Systemd Service
+Create a service file to keep your bot running in the background and restart it if it crashes.
+
+**File**: `/etc/systemd/system/tgstorage.service`
+```ini
+[Unit]
+Description=TG Storage Cluster
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/path/to/your/project
+ExecStart=/usr/local/bin/tgstorage
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+*Note: Run `which tgstorage` to find the correct path for `ExecStart`.*
+
+**Enable & Start**:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable tgstorage
+sudo systemctl start tgstorage
+```
+
+### 2. Setup Nginx Reverse Proxy
+Using Nginx allows you to use HTTPS (SSL) and handle large file uploads efficiently.
+
+**File**: `/etc/nginx/sites-available/tgstorage`
+```nginx
+server {
+    listen 80;
+    server_name storage.your-domain.com;
+
+    # Increase body size for large uploads (e.g., 2GB)
+    client_max_body_size 2048M;
+
+    # Increase timeouts for large file processing
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+
+    location / {
+        proxy_pass http://127.0.0.1:8082;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # Disable buffering for smooth streaming
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+}
+```
+
+**Activate & Restart Nginx**:
+```bash
+sudo ln -s /etc/nginx/sites-available/tgstorage /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+---
+
+## 🛠 CLI Tools
+
+### `tgstorage-key`
+Generates additional API keys for third-party apps.
+```bash
+tgstorage-key --owner "NewApp"
+```
+
+---
+
+## 💻 Code Examples
+
+Here are complete examples for integrating **TG Storage Cluster** into your applications.
+
+### 🐍 Python (Async with `httpx`)
 
 ```python
+import httpx
 import asyncio
-from tgstorage.bot import cluster
+import os
 
-async def upload_something():
-    # It will automatically load config from your current directory's .env
-    bot = await cluster.get_healthy_bot()
-    with open("image.png", "rb") as f:
-        msg = await bot.send_document(
-            chat_id=-100123456789, 
-            document=f, 
-            filename="image.png"
-        )
-    print(f"File uploaded! Message ID: {msg.message_id}")
+API_URL = "http://localhost:8082"
+API_KEY = "my_secure_pass"
 
-asyncio.run(upload_something())
+async def upload_and_share(file_path):
+    if not os.path.exists(file_path):
+        print("❌ File not found!")
+        return
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        # 1. Prepare Request
+        files = {'file': open(file_path, 'rb')}
+        data = {'expiration_days': 7}  # Optional: Auto-delete after 7 days
+        headers = {'X-API-Key': API_KEY}
+        
+        print(f"📤 Uploading {file_path}...")
+        
+        try:
+            # 2. Send Request
+            response = await client.post(f"{API_URL}/upload", files=files, data=data, headers=headers)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ Upload Success!")
+                print(f"📂 File ID:    {result['file_id']}")
+                print(f"🔗 Direct Link: {result['direct_link']}")
+                print(f"🌍 Share Link:  {result['share_link']}")
+            else:
+                print(f"❌ Upload Failed: {response.text}")
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+if __name__ == "__main__":
+    # Create a dummy file for testing
+    with open("test.txt", "w") as f: f.write("Hello TG Storage!")
+    asyncio.run(upload_and_share("test.txt"))
+```
+
+### 🟨 JavaScript / Node.js (with `axios`)
+
+*Requires `axios` and `form-data` packages (`npm install axios form-data`).*
+
+```javascript
+const axios = require('axios');
+const fs = require('fs');
+const FormData = require('form-data');
+const path = require('path');
+
+const API_URL = 'http://localhost:8082';
+const API_KEY = 'my_secure_pass';
+
+async function uploadFile(filePath) {
+    if (!fs.existsSync(filePath)) {
+        console.error("❌ File not found!");
+        return;
+    }
+
+    const form = new FormData();
+    form.append('file', fs.createReadStream(filePath));
+    form.append('expiration_days', 7); // Optional
+    // form.append('password', 'secret123'); // Optional
+
+    try {
+        console.log(`📤 Uploading ${path.basename(filePath)}...`);
+        
+        const response = await axios.post(`${API_URL}/upload`, form, {
+            headers: {
+                ...form.getHeaders(),
+                'X-API-Key': API_KEY
+            },
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity // Prevent axios from capping large files
+        });
+
+        const data = response.data;
+        console.log('✅ Upload Success!');
+        console.log(`📂 File ID:    ${data.file_id}`);
+        console.log(`🔗 Direct Link: ${data.direct_link}`);
+        console.log(`🌍 Share Link:  ${data.share_link}`);
+
+    } catch (error) {
+        if (error.response) {
+            console.error(`❌ Server Error: ${error.response.status}`, error.response.data);
+        } else {
+            console.error(`❌ Request Error: ${error.message}`);
+        }
+    }
+}
+
+// Run
+// fs.writeFileSync('test.txt', 'Hello TG Storage Node!');
+uploadFile('test.txt');
+```
+
+### 🌐 JavaScript (Frontend / Browser)
+
+```javascript
+const API_URL = "http://localhost:8082";
+const API_KEY = "my_secure_pass";
+
+async function uploadFile(fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("expiration_days", 7);
+
+    try {
+        const response = await fetch(`${API_URL}/upload`, {
+            method: "POST",
+            headers: {
+                "X-API-Key": API_KEY
+            },
+            body: formData
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log("✅ Uploaded:", data);
+            alert(`File Uploaded! Link: ${data.share_link}`);
+        } else {
+            console.error("Upload failed");
+        }
+    } catch (error) {
+        console.error("Error:", error);
+    }
+}
 ```
 
 ---
 
-## 📜 License
-MIT
+## 📝 License
+MIT License. Created by DraxonV1.
