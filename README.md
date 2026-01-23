@@ -3,6 +3,9 @@
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?style=for-the-badge&logo=fastapi)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
+[![PyPI version](https://img.shields.io/pypi/v/tgstorage-cluster?style=flat-square)](https://pypi.org/project/tgstorage-cluster/)
+![Downloads](https://img.shields.io/pepy/dt/tgstorage-cluster)
+
 
 **TG Storage Cluster** transforms Telegram into your personal, unlimited, and free cloud storage backend. By leveraging a "cluster" of Telegram bots, it distributes upload traffic to bypass rate limits and provides a high-performance HTTP API for uploading and streaming files.
 
