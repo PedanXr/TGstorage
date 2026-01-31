@@ -119,7 +119,13 @@
         <div id="drop-zone" onclick="document.getElementById('file-input').click()">
             <p id="drop-text" class="mb-2">Drag & Drop files here or click to browse</p>
             <small class="text-muted">Max. 50 MB per file (Telegram Bot API Limit). Supports streaming for videos.</small>
-            <input type="file" id="file-input" style="display: none" onchange="handleFileSelect(event)">
+            <input type="file" id="file-input" style="display: none" onchange="displaySelectedFile(event)">
+        </div>
+        
+        <div id="selected-file-info" class="mt-3 d-none">
+            <div class="alert alert-info mb-3">
+                <strong>Selected file:</strong> <span id="selected-filename"></span> (<span id="selected-filesize"></span>)
+            </div>
         </div>
         
         <div class="row mt-3">
@@ -133,6 +139,15 @@
                 <input type="text" id="upload-password" class="form-control" placeholder="Optional: Password">
                 <small class="text-muted">Download only possible with password</small>
             </div>
+        </div>
+        
+        <div class="mt-3">
+            <button id="upload-button" class="btn btn-primary" onclick="startUpload()" disabled>
+                <span class="me-2">📤</span> Upload File
+            </button>
+            <button id="cancel-button" class="btn btn-secondary ms-2" onclick="cancelSelection()" disabled>
+                Cancel
+            </button>
         </div>
         
         <div id="upload-status" class="mt-3"></div>
@@ -332,7 +347,9 @@
         });
     }
 
-    async function handleFileSelect(event) {
+    let selectedFile = null;
+
+    function displaySelectedFile(event) {
         const file = event.target.files[0];
         if (!file) return;
 
@@ -343,6 +360,33 @@
             event.target.value = '';
             return;
         }
+
+        selectedFile = file;
+        document.getElementById('selected-filename').textContent = file.name;
+        document.getElementById('selected-filesize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+        document.getElementById('selected-file-info').classList.remove('d-none');
+        document.getElementById('upload-button').disabled = false;
+        document.getElementById('cancel-button').disabled = false;
+    }
+
+    function cancelSelection() {
+        selectedFile = null;
+        document.getElementById('file-input').value = '';
+        document.getElementById('selected-file-info').classList.add('d-none');
+        document.getElementById('upload-button').disabled = true;
+        document.getElementById('cancel-button').disabled = true;
+        document.getElementById('expiration-days').value = '';
+        document.getElementById('upload-password').value = '';
+    }
+
+    async function startUpload() {
+        if (!selectedFile) return;
+
+        const file = selectedFile;
+
+        // Disable buttons during upload
+        document.getElementById('upload-button').disabled = true;
+        document.getElementById('cancel-button').disabled = true;
 
         const formData = new FormData();
         formData.append('file', file);
@@ -403,6 +447,7 @@
                     setTimeout(() => progressDiv.remove(), 5000);
                     loadFiles();
                     loadStats();
+                    cancelSelection();
                 } else {
                     progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Error: ${data.detail || 'Upload failed'}</div>`;
                     setTimeout(() => progressDiv.remove(), 5000);
@@ -441,6 +486,10 @@
             loadFiles();
             loadStats();
         }
+    }
+
+    function handleFileSelect(event) {
+        displaySelectedFile(event);
     }
 
     const dz = document.getElementById('drop-zone');
