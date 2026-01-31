@@ -110,7 +110,17 @@ async def upload(
         share_token = secrets.token_urlsafe(16)
         exp_date = (datetime.datetime.now() + datetime.timedelta(days=expiration_days)).isoformat() if expiration_days else None
         
-        await add_file(file_id, message.message_id, file.filename, file_size, file.content_type or "application/octet-stream", exp_date, share_token, password)
+        await add_file(
+            file_id,
+            message.message_id,
+            file.filename,
+            file_size,
+            file.content_type or "application/octet-stream",
+            exp_date,
+            share_token,
+            password,
+            auth,
+        )
         
         return {
             "status": "success", 
@@ -195,7 +205,7 @@ async def get_share_page(token: str, request: Request):
 
 @api.get("/debug/db")
 async def debug_db(auth: str = Depends(verify_api_key)):
-    files = await list_files(100, 0)
+    files = await list_files(100, 0, auth_key=auth)
     return {"count": len(files), "files": [dict(f) for f in files]}
 
 @api.get("/stats")
@@ -205,7 +215,7 @@ async def get_system_stats(auth: str = Depends(verify_api_key)):
 @api.get("/files")
 async def list_all_files(limit: int = 50, offset: int = 0, search: str = None, auth: str = Depends(verify_api_key)):
     logger.info(f"Listing files: limit={limit}, offset={offset}, search={search}")
-    files = await list_files(limit, offset, search)
+    files = await list_files(limit, offset, search, auth_key=auth)
     result = [dict(f) for f in files]
     logger.info(f"Found {len(result)} files")
     return result
