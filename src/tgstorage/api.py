@@ -60,7 +60,13 @@ async def preflight_handler(request: Request, rest_of_path: str):
 
 @api.get("/", response_class=HTMLResponse)
 async def get_dashboard():
-    return resources.files("tgstorage").joinpath("index.html").read_text(encoding="utf-8")
+    try:
+        return resources.files("tgstorage").joinpath("index.html").read_text(encoding="utf-8")
+    except (FileNotFoundError, ModuleNotFoundError, AttributeError) as exc:
+        logger.warning("Falling back to local index.html: %s", exc)
+        index_path = os.path.join(os.path.dirname(__file__), "index.html")
+        with open(index_path, "r", encoding="utf-8") as handle:
+            return handle.read()
 
 async def start_bot():
     await init_db()
