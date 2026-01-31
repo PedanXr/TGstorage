@@ -122,6 +122,15 @@
             <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect(event)">
         </div>
         <div id="upload-status" class="mt-3"></div>
+        <div id="upload-progress" class="mt-3 d-none">
+            <div class="d-flex justify-content-between mb-2">
+                <span id="progress-filename"></span>
+                <span id="progress-percent">0%</span>
+            </div>
+            <div class="progress" style="height: 24px;">
+                <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+        </div>
     </div>
 
     <div class="row mb-4" id="stats-row">
@@ -305,24 +314,55 @@
         formData.append('file', file);
 
         const statusDiv = document.getElementById('upload-status');
-        statusDiv.innerHTML = `<div class="alert alert-info">Uploading ${file.name}...</div>`;
+        const progressDiv = document.getElementById('upload-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercent = document.getElementById('progress-percent');
+        const progressFilename = document.getElementById('progress-filename');
 
-        try {
-            const res = await apiFetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (data.status === 'success') {
-                statusDiv.innerHTML = `<div class="alert alert-success">Uploaded! <a href="${data.share_link}" target="_blank">Share Link</a></div>`;
-                loadFiles();
-                loadStats();
-            } else {
-                statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.detail || 'Upload failed'}</div>`;
+        statusDiv.innerHTML = '';
+        progressDiv.classList.remove('d-none');
+        progressFilename.textContent = file.name;
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+
+        const xhr = new XMLHttpRequest();
+        const key = localStorage.getItem('tg_api_key');
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percentComplete + '%';
+                progressBar.setAttribute('aria-valuenow', percentComplete);
+                progressPercent.textContent = percentComplete + '%';
             }
-        } catch (e) {
+        });
+
+        xhr.addEventListener('load', () => {
+            progressDiv.classList.add('d-none');
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                if (data.status === 'success') {
+                    statusDiv.innerHTML = `<div class="alert alert-success">Uploaded! <a href="${data.share_link}" target="_blank">Share Link</a></div>`;
+                    loadFiles();
+                    loadStats();
+                } else {
+                    statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.detail || 'Upload failed'}</div>`;
+                }
+            } else if (xhr.status === 403) {
+                statusDiv.innerHTML = `<div class="alert alert-danger">Invalid API Key!</div>`;
+            } else {
+                statusDiv.innerHTML = `<div class="alert alert-danger">Upload failed: ${xhr.status}</div>`;
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            progressDiv.classList.add('d-none');
             statusDiv.innerHTML = `<div class="alert alert-danger">Network Error</div>`;
-        }
+        });
+
+        xhr.open('POST', `${API_BASE}/upload`);
+        xhr.setRequestHeader('X-API-Key', key);
+        xhr.send(formData);
     }
 
     async function deleteFile(fileId) {
