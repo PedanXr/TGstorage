@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Response, Depends, Header, Query
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from importlib import resources
 import os
 import secrets
 import datetime
@@ -59,8 +60,7 @@ async def preflight_handler(request: Request, rest_of_path: str):
 
 @api.get("/", response_class=HTMLResponse)
 async def get_dashboard():
-    with open("index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    return resources.files("tgstorage").joinpath("index.html").read_text(encoding="utf-8")
 
 async def start_bot():
     await init_db()
