@@ -77,24 +77,24 @@
     <div class="login-card p-4 p-md-5">
         <div class="mb-4">
             <h1 class="mb-2">TG Storage Cluster</h1>
-            <p class="text-muted mb-0">Melde dich an, um deine Dateien zu verwalten.</p>
+            <p class="text-muted mb-0">Sign in to manage your files.</p>
         </div>
         <div class="mb-4">
             <label for="api-key" class="form-label fw-semibold">API Key</label>
             <div class="input-group">
                 <span class="input-group-text">🔐</span>
-                <input type="password" id="api-key" class="form-control" placeholder="Admin oder Nutzer API Key">
-                <button class="btn btn-primary" onclick="saveKey()">Anmelden</button>
+                <input type="password" id="api-key" class="form-control" placeholder="Admin or User API Key">
+                <button class="btn btn-primary" onclick="saveKey()">Sign In</button>
             </div>
-            <small class="text-muted">Der API Key ist notwendig, bevor Inhalte angezeigt werden.</small>
+            <small class="text-muted">API Key is required before content can be displayed.</small>
         </div>
         <div class="telegram-placeholder p-3">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <h6 class="mb-1">Telegram Login</h6>
-                    <p class="small text-muted mb-0">Benötigt ein Telegram Login Widget + Backend-Validierung.</p>
+                    <p class="small text-muted mb-0">Requires Telegram Login Widget + Backend validation.</p>
                 </div>
-                <span class="badge text-bg-secondary">Bald verfügbar</span>
+                <span class="badge text-bg-secondary">Coming Soon</span>
             </div>
         </div>
     </div>
@@ -105,10 +105,10 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
                 <h1 class="h3 mb-1">🚀 TG Storage Dashboard</h1>
-                <p class="mb-0 text-white-50">Schnellzugriff auf Uploads, Views und Freigaben.</p>
+                <p class="mb-0 text-white-50">Quick access to uploads, views and shares.</p>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-                <button class="btn btn-light action-pill" onclick="clearKey()">Abmelden</button>
+                <button class="btn btn-light action-pill" onclick="clearKey()">Sign Out</button>
                 <button class="btn btn-outline-light action-pill" onclick="loadFiles()">🔄 Refresh</button>
             </div>
         </div>
@@ -118,10 +118,40 @@
         <h4 class="mb-3">Upload New File</h4>
         <div id="drop-zone" onclick="document.getElementById('file-input').click()">
             <p id="drop-text" class="mb-2">Drag & Drop files here or click to browse</p>
-            <small class="text-muted">Unterstützt große Dateien mit Telegram Streaming.</small>
-            <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect(event)">
+            <small class="text-muted">Max. 50 MB per file (Telegram Bot API Limit). Supports streaming for videos.</small>
+            <input type="file" id="file-input" style="display: none" onchange="displaySelectedFile(event)">
         </div>
+        
+        <div id="selected-file-info" class="mt-3 d-none">
+            <div class="alert alert-info mb-3">
+                <strong>Selected file:</strong> <span id="selected-filename"></span> (<span id="selected-filesize"></span>)
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-md-6">
+                <label for="expiration-days" class="form-label">Auto-Delete after (Days)</label>
+                <input type="number" id="expiration-days" class="form-control" placeholder="Optional: e.g. 7" min="1" max="365">
+                <small class="text-muted">Leave empty for permanent storage</small>
+            </div>
+            <div class="col-md-6">
+                <label for="upload-password" class="form-label">Password Protection</label>
+                <input type="text" id="upload-password" class="form-control" placeholder="Optional: Password">
+                <small class="text-muted">Download only possible with password</small>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <button id="upload-button" class="btn btn-primary" onclick="startUpload()" disabled>
+                <span class="me-2">📤</span> Upload File
+            </button>
+            <button id="cancel-button" class="btn btn-secondary ms-2" onclick="cancelSelection()" disabled>
+                Cancel
+            </button>
+        </div>
+        
         <div id="upload-status" class="mt-3"></div>
+        <div id="upload-progress-container" class="mt-3"></div>
     </div>
 
     <div class="row mb-4" id="stats-row">
@@ -149,10 +179,10 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
             <div>
                 <h4 class="mb-1">Files List</h4>
-                <p class="text-muted small mb-0">Hinweis: Standardmäßig werden nur eigene Dateien angezeigt. Admin-Keys sehen alles.</p>
+                <p class="text-muted small mb-0">Note: By default, only your own files are shown. Admin keys see everything.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <input id="search-input" class="form-control form-control-sm" placeholder="Suche nach Dateinamen" oninput="scheduleSearch()" />
+                <input id="search-input" class="form-control form-control-sm" placeholder="Search by filename" oninput="scheduleSearch()" />
                 <button class="btn btn-sm btn-outline-secondary" onclick="debugDB()">🐞 Debug DB</button>
             </div>
         </div>
@@ -163,7 +193,7 @@
                         <th>Preview</th>
                         <th>Filename</th>
                         <th>Size</th>
-                        <th>Views</th>
+                        <th>Expires</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -254,21 +284,41 @@
 
             files.forEach(file => {
                 const isImage = file.mime_type.includes('image');
+                const hasPassword = file.password && file.password.trim() !== '';
                 const rawUrl = `${API_BASE}/f/${file.file_id}/${file.file_name}`;
                 const dlUrl = `${API_BASE}/dl/${file.file_id}/${file.file_name}`;
                 const shareUrl = `${API_BASE}/share/${file.share_token}`;
+                
+                // Format expiration date
+                let expirationText = 'Never';
+                if (file.expiration_date) {
+                    try {
+                        const expDate = new Date(file.expiration_date);
+                        expirationText = expDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                    } catch (e) {
+                        expirationText = 'Invalid';
+                    }
+                }
+
+                // Preview: hide for password-protected files
+                let previewHtml;
+                if (hasPassword) {
+                    previewHtml = `<div class="p-2 border rounded bg-light text-center">🔒</div>`;
+                } else if (isImage) {
+                    previewHtml = `<img src="${rawUrl}" class="file-preview">`;
+                } else {
+                    previewHtml = `<div class="p-2 border rounded bg-light text-center">📄</div>`;
+                }
 
                 const row = `
                     <tr>
+                        <td>${previewHtml}</td>
                         <td>
-                            ${isImage ? `<img src="${rawUrl}" class="file-preview">` : `<div class="p-2 border rounded bg-light text-center">📄</div>`}
-                        </td>
-                        <td>
-                            <strong>${file.file_name}</strong><br>
+                            ${hasPassword ? '🔐 ' : ''}<strong>${file.file_name}</strong><br>
                             <small class="text-muted">${file.mime_type}</small>
                         </td>
                         <td>${(file.file_size / 1024).toFixed(1)} KB</td>
-                        <td>${file.view_count}</td>
+                        <td><small class="text-muted">${expirationText}</small></td>
                         <td>
                             <div class="btn-group">
                                 <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
@@ -297,32 +347,136 @@
         });
     }
 
-    async function handleFileSelect(event) {
+    let selectedFile = null;
+
+    function displaySelectedFile(event) {
         const file = event.target.files[0];
         if (!file) return;
 
+        // Check file size (50 MB = 52428800 bytes)
+        const MAX_FILE_SIZE = 52428800;
+        if (file.size > MAX_FILE_SIZE) {
+            alert(`File too large! Maximum: 50 MB\n\nYour file: ${(file.size / 1024 / 1024).toFixed(2)} MB\n\nThe Telegram Bot API allows a maximum of 50 MB per file.`);
+            event.target.value = '';
+            return;
+        }
+
+        selectedFile = file;
+        document.getElementById('selected-filename').textContent = file.name;
+        document.getElementById('selected-filesize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+        document.getElementById('selected-file-info').classList.remove('d-none');
+        document.getElementById('upload-button').disabled = false;
+        document.getElementById('cancel-button').disabled = false;
+    }
+
+    function cancelSelection() {
+        selectedFile = null;
+        document.getElementById('file-input').value = '';
+        document.getElementById('selected-file-info').classList.add('d-none');
+        document.getElementById('upload-button').disabled = true;
+        document.getElementById('cancel-button').disabled = true;
+        document.getElementById('expiration-days').value = '';
+        document.getElementById('upload-password').value = '';
+    }
+
+    async function startUpload() {
+        if (!selectedFile) return;
+
+        const file = selectedFile;
+
+        // Disable buttons during upload
+        document.getElementById('upload-button').disabled = true;
+        document.getElementById('cancel-button').disabled = true;
+
         const formData = new FormData();
         formData.append('file', file);
-
-        const statusDiv = document.getElementById('upload-status');
-        statusDiv.innerHTML = `<div class="alert alert-info">Uploading ${file.name}...</div>`;
-
-        try {
-            const res = await apiFetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
-            const data = await res.json();
-            if (data.status === 'success') {
-                statusDiv.innerHTML = `<div class="alert alert-success">Uploaded! <a href="${data.share_link}" target="_blank">Share Link</a></div>`;
-                loadFiles();
-                loadStats();
-            } else {
-                statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.detail || 'Upload failed'}</div>`;
-            }
-        } catch (e) {
-            statusDiv.innerHTML = `<div class="alert alert-danger">Network Error</div>`;
+        
+        // Add optional expiration_days
+        const expirationDays = document.getElementById('expiration-days').value;
+        if (expirationDays && expirationDays > 0) {
+            formData.append('expiration_days', expirationDays);
         }
+        
+        // Add optional password
+        const password = document.getElementById('upload-password').value;
+        if (password && password.trim()) {
+            formData.append('password', password.trim());
+        }
+
+        const uploadId = 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const container = document.getElementById('upload-progress-container');
+        
+        const progressDiv = document.createElement('div');
+        progressDiv.id = uploadId;
+        progressDiv.className = 'mb-3 p-3 border rounded';
+        progressDiv.innerHTML = `
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-semibold">${file.name}</span>
+                <span class="upload-percent">0%</span>
+            </div>
+            <div class="progress" style="height: 20px;">
+                <div class="upload-bar progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+        `;
+        container.appendChild(progressDiv);
+
+        const progressBar = progressDiv.querySelector('.upload-bar');
+        const progressPercent = progressDiv.querySelector('.upload-percent');
+        const xhr = new XMLHttpRequest();
+        const key = localStorage.getItem('tg_api_key');
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = percentComplete + '%';
+                progressBar.setAttribute('aria-valuenow', percentComplete);
+                progressPercent.textContent = percentComplete + '%';
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                const data = JSON.parse(xhr.responseText);
+                if (data.status === 'success') {
+                    progressDiv.innerHTML = `
+                        <div class="alert alert-success mb-0">
+                            <strong>✓ ${file.name}</strong> uploaded successfully!
+                            <a href="${data.share_link}" target="_blank" class="alert-link ms-2">Share Link</a>
+                        </div>
+                    `;
+                    setTimeout(() => progressDiv.remove(), 5000);
+                    loadFiles();
+                    loadStats();
+                    cancelSelection();
+                } else {
+                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Error: ${data.detail || 'Upload failed'}</div>`;
+                    setTimeout(() => progressDiv.remove(), 5000);
+                }
+            } else if (xhr.status === 413) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">❌ ${data.detail || 'File too large (max. 50 MB)'}</div>`;
+                } catch {
+                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">❌ File too large! Maximum: 50 MB (Telegram Bot API Limit)</div>`;
+                }
+                setTimeout(() => progressDiv.remove(), 8000);
+            } else if (xhr.status === 403) {
+                progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Invalid API Key!</div>`;
+                setTimeout(() => progressDiv.remove(), 5000);
+            } else {
+                progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Upload failed: ${xhr.status}</div>`;
+                setTimeout(() => progressDiv.remove(), 5000);
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Network Error</div>`;
+            setTimeout(() => progressDiv.remove(), 5000);
+        });
+
+        xhr.open('POST', `${API_BASE}/upload`);
+        xhr.setRequestHeader('X-API-Key', key);
+        xhr.send(formData);
     }
 
     async function deleteFile(fileId) {
@@ -332,6 +486,10 @@
             loadFiles();
             loadStats();
         }
+    }
+
+    function handleFileSelect(event) {
+        displaySelectedFile(event);
     }
 
     const dz = document.getElementById('drop-zone');

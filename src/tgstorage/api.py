@@ -95,6 +95,14 @@ async def upload(
             return os.path.getsize(temp_path)
 
         file_size = await asyncio.to_thread(save_file)
+        
+        # Check file size limit (50 MB = 52428800 bytes)
+        MAX_FILE_SIZE = 52428800
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413, 
+                detail=f"File too large. Maximum allowed size is 50 MB. Telegram Bot API limits file uploads to 50 MB per file."
+            )
         logger.info(f"Uploading {file.filename} via {bot._custom_name}")
         
         is_video = file.content_type and "video" in file.content_type.lower()

@@ -82,7 +82,7 @@ tgstorage
 
 ---
 
-## 🐳 Run with Docker
+## 🐳 Run with Docker (Compose)
 
 You can run TG Storage Cluster entirely in a container.
 
