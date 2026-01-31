@@ -77,24 +77,24 @@
     <div class="login-card p-4 p-md-5">
         <div class="mb-4">
             <h1 class="mb-2">TG Storage Cluster</h1>
-            <p class="text-muted mb-0">Melde dich an, um deine Dateien zu verwalten.</p>
+            <p class="text-muted mb-0">Sign in to manage your files.</p>
         </div>
         <div class="mb-4">
             <label for="api-key" class="form-label fw-semibold">API Key</label>
             <div class="input-group">
                 <span class="input-group-text">🔐</span>
-                <input type="password" id="api-key" class="form-control" placeholder="Admin oder Nutzer API Key">
-                <button class="btn btn-primary" onclick="saveKey()">Anmelden</button>
+                <input type="password" id="api-key" class="form-control" placeholder="Admin or User API Key">
+                <button class="btn btn-primary" onclick="saveKey()">Sign In</button>
             </div>
-            <small class="text-muted">Der API Key ist notwendig, bevor Inhalte angezeigt werden.</small>
+            <small class="text-muted">API Key is required before content can be displayed.</small>
         </div>
         <div class="telegram-placeholder p-3">
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <h6 class="mb-1">Telegram Login</h6>
-                    <p class="small text-muted mb-0">Benötigt ein Telegram Login Widget + Backend-Validierung.</p>
+                    <p class="small text-muted mb-0">Requires Telegram Login Widget + Backend validation.</p>
                 </div>
-                <span class="badge text-bg-secondary">Bald verfügbar</span>
+                <span class="badge text-bg-secondary">Coming Soon</span>
             </div>
         </div>
     </div>
@@ -105,10 +105,10 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
             <div>
                 <h1 class="h3 mb-1">🚀 TG Storage Dashboard</h1>
-                <p class="mb-0 text-white-50">Schnellzugriff auf Uploads, Views und Freigaben.</p>
+                <p class="mb-0 text-white-50">Quick access to uploads, views and shares.</p>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center">
-                <button class="btn btn-light action-pill" onclick="clearKey()">Abmelden</button>
+                <button class="btn btn-light action-pill" onclick="clearKey()">Sign Out</button>
                 <button class="btn btn-outline-light action-pill" onclick="loadFiles()">🔄 Refresh</button>
             </div>
         </div>
@@ -118,20 +118,20 @@
         <h4 class="mb-3">Upload New File</h4>
         <div id="drop-zone" onclick="document.getElementById('file-input').click()">
             <p id="drop-text" class="mb-2">Drag & Drop files here or click to browse</p>
-            <small class="text-muted">Max. 50 MB pro Datei (Telegram Bot API Limit). Unterstützt Streaming für Videos.</small>
+            <small class="text-muted">Max. 50 MB per file (Telegram Bot API Limit). Supports streaming for videos.</small>
             <input type="file" id="file-input" style="display: none" onchange="handleFileSelect(event)">
         </div>
         
         <div class="row mt-3">
             <div class="col-md-6">
-                <label for="expiration-days" class="form-label">Auto-Delete nach (Tage)</label>
-                <input type="number" id="expiration-days" class="form-control" placeholder="Optional: z.B. 7" min="1" max="365">
-                <small class="text-muted">Leer lassen für permanente Speicherung</small>
+                <label for="expiration-days" class="form-label">Auto-Delete after (Days)</label>
+                <input type="number" id="expiration-days" class="form-control" placeholder="Optional: e.g. 7" min="1" max="365">
+                <small class="text-muted">Leave empty for permanent storage</small>
             </div>
             <div class="col-md-6">
-                <label for="upload-password" class="form-label">Passwort-Schutz</label>
-                <input type="text" id="upload-password" class="form-control" placeholder="Optional: Passwort">
-                <small class="text-muted">Download nur mit Passwort möglich</small>
+                <label for="upload-password" class="form-label">Password Protection</label>
+                <input type="text" id="upload-password" class="form-control" placeholder="Optional: Password">
+                <small class="text-muted">Download only possible with password</small>
             </div>
         </div>
         
@@ -164,10 +164,10 @@
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
             <div>
                 <h4 class="mb-1">Files List</h4>
-                <p class="text-muted small mb-0">Hinweis: Standardmäßig werden nur eigene Dateien angezeigt. Admin-Keys sehen alles.</p>
+                <p class="text-muted small mb-0">Note: By default, only your own files are shown. Admin keys see everything.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <input id="search-input" class="form-control form-control-sm" placeholder="Suche nach Dateinamen" oninput="scheduleSearch()" />
+                <input id="search-input" class="form-control form-control-sm" placeholder="Search by filename" oninput="scheduleSearch()" />
                 <button class="btn btn-sm btn-outline-secondary" onclick="debugDB()">🐞 Debug DB</button>
             </div>
         </div>
@@ -319,7 +319,7 @@
         // Check file size (50 MB = 52428800 bytes)
         const MAX_FILE_SIZE = 52428800;
         if (file.size > MAX_FILE_SIZE) {
-            alert(`Datei zu groß! Maximum: 50 MB\n\nDeine Datei: ${(file.size / 1024 / 1024).toFixed(2)} MB\n\nDie Telegram Bot API erlaubt maximal 50 MB pro Datei.`);
+            alert(`File too large! Maximum: 50 MB\n\nYour file: ${(file.size / 1024 / 1024).toFixed(2)} MB\n\nThe Telegram Bot API allows a maximum of 50 MB per file.`);
             event.target.value = '';
             return;
         }
@@ -376,7 +376,7 @@
                 if (data.status === 'success') {
                     progressDiv.innerHTML = `
                         <div class="alert alert-success mb-0">
-                            <strong>✓ ${file.name}</strong> erfolgreich hochgeladen!
+                            <strong>✓ ${file.name}</strong> uploaded successfully!
                             <a href="${data.share_link}" target="_blank" class="alert-link ms-2">Share Link</a>
                         </div>
                     `;
@@ -390,9 +390,9 @@
             } else if (xhr.status === 413) {
                 try {
                     const data = JSON.parse(xhr.responseText);
-                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">❌ ${data.detail || 'Datei zu groß (max. 50 MB)'}</div>`;
+                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">❌ ${data.detail || 'File too large (max. 50 MB)'}</div>`;
                 } catch {
-                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">❌ Datei zu groß! Maximum: 50 MB (Telegram Bot API Limit)</div>`;
+                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">❌ File too large! Maximum: 50 MB (Telegram Bot API Limit)</div>`;
                 }
                 setTimeout(() => progressDiv.remove(), 8000);
             } else if (xhr.status === 403) {
