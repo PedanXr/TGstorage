@@ -122,15 +122,7 @@
             <input type="file" id="file-input" style="display: none;" onchange="handleFileSelect(event)">
         </div>
         <div id="upload-status" class="mt-3"></div>
-        <div id="upload-progress" class="mt-3 d-none">
-            <div class="d-flex justify-content-between mb-2">
-                <span id="progress-filename"></span>
-                <span id="progress-percent">0%</span>
-            </div>
-            <div class="progress" style="height: 24px;">
-                <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-        </div>
+        <div id="upload-progress-container" class="mt-3"></div>
     </div>
 
     <div class="row mb-4" id="stats-row">
@@ -313,18 +305,25 @@
         const formData = new FormData();
         formData.append('file', file);
 
-        const statusDiv = document.getElementById('upload-status');
-        const progressDiv = document.getElementById('upload-progress');
-        const progressBar = document.getElementById('progress-bar');
-        const progressPercent = document.getElementById('progress-percent');
-        const progressFilename = document.getElementById('progress-filename');
+        const uploadId = 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        const container = document.getElementById('upload-progress-container');
+        
+        const progressDiv = document.createElement('div');
+        progressDiv.id = uploadId;
+        progressDiv.className = 'mb-3 p-3 border rounded';
+        progressDiv.innerHTML = `
+            <div class="d-flex justify-content-between mb-2">
+                <span class="fw-semibold">${file.name}</span>
+                <span class="upload-percent">0%</span>
+            </div>
+            <div class="progress" style="height: 20px;">
+                <div class="upload-bar progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+        `;
+        container.appendChild(progressDiv);
 
-        statusDiv.innerHTML = '';
-        progressDiv.classList.remove('d-none');
-        progressFilename.textContent = file.name;
-        progressBar.style.width = '0%';
-        progressPercent.textContent = '0%';
-
+        const progressBar = progressDiv.querySelector('.upload-bar');
+        const progressPercent = progressDiv.querySelector('.upload-percent');
         const xhr = new XMLHttpRequest();
         const key = localStorage.getItem('tg_api_key');
 
@@ -338,26 +337,34 @@
         });
 
         xhr.addEventListener('load', () => {
-            progressDiv.classList.add('d-none');
             if (xhr.status === 200) {
                 const data = JSON.parse(xhr.responseText);
                 if (data.status === 'success') {
-                    statusDiv.innerHTML = `<div class="alert alert-success">Uploaded! <a href="${data.share_link}" target="_blank">Share Link</a></div>`;
+                    progressDiv.innerHTML = `
+                        <div class="alert alert-success mb-0">
+                            <strong>✓ ${file.name}</strong> erfolgreich hochgeladen!
+                            <a href="${data.share_link}" target="_blank" class="alert-link ms-2">Share Link</a>
+                        </div>
+                    `;
+                    setTimeout(() => progressDiv.remove(), 5000);
                     loadFiles();
                     loadStats();
                 } else {
-                    statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${data.detail || 'Upload failed'}</div>`;
+                    progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Error: ${data.detail || 'Upload failed'}</div>`;
+                    setTimeout(() => progressDiv.remove(), 5000);
                 }
             } else if (xhr.status === 403) {
-                statusDiv.innerHTML = `<div class="alert alert-danger">Invalid API Key!</div>`;
+                progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Invalid API Key!</div>`;
+                setTimeout(() => progressDiv.remove(), 5000);
             } else {
-                statusDiv.innerHTML = `<div class="alert alert-danger">Upload failed: ${xhr.status}</div>`;
+                progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Upload failed: ${xhr.status}</div>`;
+                setTimeout(() => progressDiv.remove(), 5000);
             }
         });
 
         xhr.addEventListener('error', () => {
-            progressDiv.classList.add('d-none');
-            statusDiv.innerHTML = `<div class="alert alert-danger">Network Error</div>`;
+            progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Network Error</div>`;
+            setTimeout(() => progressDiv.remove(), 5000);
         });
 
         xhr.open('POST', `${API_BASE}/upload`);
