@@ -61,7 +61,10 @@
     <!-- Files Table -->
     <div class="card p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4>Files List</h4>
+            <div>
+                <h4 class="mb-1">Files List</h4>
+                <small class="text-muted">Hinweis: Standardmäßig werden nur eigene Dateien angezeigt. Admin-Keys sehen alles.</small>
+            </div>
             <div>
                 <button class="btn btn-sm btn-outline-secondary" onclick="debugDB()">🐞 Debug DB</button>
                 <button class="btn btn-sm btn-primary" onclick="loadFiles()">🔄 Refresh</button>

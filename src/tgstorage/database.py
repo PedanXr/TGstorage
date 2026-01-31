@@ -16,9 +16,14 @@ async def init_db():
                 expiration_date TIMESTAMP,
                 share_token TEXT UNIQUE,
                 view_count INTEGER DEFAULT 0,
-                password TEXT
+                password TEXT,
+                owner_key TEXT
             )
         """)
+        async with db.execute("PRAGMA table_info(files)") as cursor:
+            columns = [row[1] for row in await cursor.fetchall()]
+        if "owner_key" not in columns:
+            await db.execute("ALTER TABLE files ADD COLUMN owner_key TEXT")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,11 +44,21 @@ async def verify_key_db(key):
         async with db.execute("SELECT 1 FROM api_keys WHERE key = ?", (key,)) as cursor:
             return await cursor.fetchone() is not None
 
-async def add_file(file_id, message_id, file_name, file_size, mime_type, expiration_date=None, share_token=None, password=None):
+async def add_file(
+    file_id,
+    message_id,
+    file_name,
+    file_size,
+    mime_type,
+    expiration_date=None,
+    share_token=None,
+    password=None,
+    owner_key=None,
+):
     async with aiosqlite.connect(settings.DATABASE_URL) as db:
         await db.execute(
-            "INSERT INTO files (file_id, message_id, file_name, file_size, mime_type, expiration_date, share_token, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (file_id, message_id, file_name, file_size, mime_type, expiration_date, share_token, password)
+            "INSERT INTO files (file_id, message_id, file_name, file_size, mime_type, expiration_date, share_token, password, owner_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (file_id, message_id, file_name, file_size, mime_type, expiration_date, share_token, password, owner_key),
         )
         await db.commit()
 
@@ -64,14 +79,21 @@ async def increment_view_count(file_id):
         await db.execute("UPDATE files SET view_count = view_count + 1 WHERE file_id = ?", (file_id,))
         await db.commit()
 
-async def list_files(limit=20, offset=0, search=None):
+async def list_files(limit=20, offset=0, search=None, auth_key=None):
     async with aiosqlite.connect(settings.DATABASE_URL) as db:
         db.row_factory = aiosqlite.Row
         query = "SELECT * FROM files"
         params = []
+        where_clauses = []
+        is_admin = auth_key == settings.ADMIN_API_KEY.strip()
+        if auth_key and not is_admin:
+            where_clauses.append("owner_key = ?")
+            params.append(auth_key)
         if search:
-            query += " WHERE file_name LIKE ?"
+            where_clauses.append("file_name LIKE ?")
             params.append(f"%{search}%")
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
         query += " ORDER BY upload_date DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         async with db.execute(query, params) as cursor:
