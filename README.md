@@ -20,6 +20,9 @@
 
 ---
 
+## Screenshot
+<img width="1092" height="765" alt="Screenshot 2026-01-31 135947" src="https://github.com/user-attachments/assets/aa03eb9d-ee38-4d7b-a751-057c51ab8c3b" />
+
 ## 🚀 Quick Start (5 Minutes)
 
 ### 1. Prerequisites
