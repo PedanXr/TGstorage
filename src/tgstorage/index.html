@@ -155,6 +155,8 @@
                     const dlUrl = `${API_BASE}/dl/${file.file_id}/${file.file_name}`;
                     const shareUrl = `${API_BASE}/share/${file.share_token}`;
 
+                    const publicLabel = file.is_public ? 'Public entfernen' : 'Public freigeben';
+                    const publicClass = file.is_public ? 'btn btn-sm btn-outline-secondary' : 'btn btn-sm btn-outline-success';
                     const row = `
                         <tr>
                             <td>
@@ -172,6 +174,7 @@
                                     <a href="${dlUrl}" target="_blank" class="btn btn-sm btn-success">Download</a>
                                     <button onclick="copyToClipboard('${shareUrl}')" class="btn btn-sm btn-warning">Copy Share</button>
                                     <button onclick="copyToClipboard('${rawUrl}')" class="btn btn-sm btn-info text-white">Copy Raw</button>
+                                    <button onclick="togglePublic('${file.file_id}', ${file.is_public})" class="${publicClass}">${publicLabel}</button>
                                     <button onclick="deleteFile('${file.file_id}')" class="btn btn-sm btn-danger">Delete</button>
                                 </div>
                             </td>
@@ -222,6 +225,14 @@
         if (res.ok) {
             loadFiles();
             loadStats();
+        }
+    }
+
+    async function togglePublic(fileId, isPublic) {
+        const method = isPublic ? 'DELETE' : 'POST';
+        const res = await apiFetch(`/file/${fileId}/public`, { method });
+        if (res.ok) {
+            loadFiles();
         }
     }
 

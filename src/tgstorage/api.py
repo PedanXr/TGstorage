@@ -8,12 +8,14 @@ import shutil
 import re
 import asyncio
 import logging
+import html
 from typing import List, Optional
 from .config import settings
 from .database import (
-    add_file, get_file_by_id, delete_file_db, 
+    add_file, get_file_by_id, delete_file_db,
     get_file_by_share_token, increment_view_count,
-    list_files, get_stats, verify_key_db, init_db
+    list_files, get_stats, verify_key_db, init_db,
+    set_file_public, list_public_files
 )
 from .bot import cluster
 
@@ -61,6 +63,57 @@ async def preflight_handler(request: Request, rest_of_path: str):
 async def get_dashboard():
     with open("index.html", "r", encoding="utf-8") as f:
         return f.read()
+
+@api.get("/public", response_class=HTMLResponse)
+async def get_public_page():
+    files = await list_public_files()
+    base_url = settings.BASE_URL.rstrip("/")
+    rows = []
+    for file_data in files:
+        file_name = html.escape(file_data["file_name"])
+        dl_link = f"{base_url}/dl/{file_data['file_id']}/{file_data['file_name']}"
+        share_link = f"{base_url}/share/{file_data['share_token']}"
+        rows.append(
+            f"<tr><td>{file_name}</td>"
+            f"<td><a href=\"{dl_link}\" target=\"_blank\">{html.escape(dl_link)}</a></td>"
+            f"<td><a href=\"{share_link}\" target=\"_blank\">{html.escape(share_link)}</a></td></tr>"
+        )
+
+    table_body = "\n".join(rows) if rows else "<tr><td colspan=\"3\">No public files available.</td></tr>"
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Public Files</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-light">
+        <div class="container py-5">
+            <h1 class="mb-4">Public Files</h1>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>File</th>
+                                    <th>Direct Link</th>
+                                    <th>Share Link</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {table_body}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
 
 async def start_bot():
     await init_db()
@@ -228,3 +281,19 @@ async def delete_file_endpoint(file_id: str, auth: str = Depends(verify_api_key)
     except Exception as e: logger.error(f"Error deleting Telegram message: {e}")
     await delete_file_db(file_id)
     return {"status": "success", "message": "File deleted"}
+
+@api.post("/file/{file_id}/public")
+async def publish_file(file_id: str, auth: str = Depends(verify_api_key)):
+    file_data = await get_file_by_id(file_id)
+    if not file_data:
+        raise HTTPException(status_code=404, detail="File not found")
+    await set_file_public(file_id, True)
+    return {"status": "success", "message": "File is now public"}
+
+@api.delete("/file/{file_id}/public")
+async def unpublish_file(file_id: str, auth: str = Depends(verify_api_key)):
+    file_data = await get_file_by_id(file_id)
+    if not file_data:
+        raise HTTPException(status_code=404, detail="File not found")
+    await set_file_public(file_id, False)
+    return {"status": "success", "message": "File is no longer public"}

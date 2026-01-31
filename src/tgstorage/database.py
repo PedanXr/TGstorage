@@ -16,9 +16,15 @@ async def init_db():
                 expiration_date TIMESTAMP,
                 share_token TEXT UNIQUE,
                 view_count INTEGER DEFAULT 0,
-                password TEXT
+                password TEXT,
+                is_public INTEGER DEFAULT 0
             )
         """)
+        columns = []
+        async with db.execute("PRAGMA table_info(files)") as cursor:
+            columns = [row[1] async for row in cursor]
+        if "is_public" not in columns:
+            await db.execute("ALTER TABLE files ADD COLUMN is_public INTEGER DEFAULT 0")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS api_keys (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,4 +103,18 @@ async def get_expired_files():
         db.row_factory = aiosqlite.Row
         now = datetime.datetime.now().isoformat()
         async with db.execute("SELECT * FROM files WHERE expiration_date IS NOT NULL AND expiration_date < ?", (now,)) as cursor:
+            return await cursor.fetchall()
+
+async def set_file_public(file_id, is_public):
+    async with aiosqlite.connect(settings.DATABASE_URL) as db:
+        await db.execute("UPDATE files SET is_public = ? WHERE file_id = ?", (1 if is_public else 0, file_id))
+        await db.commit()
+
+async def list_public_files(limit=100, offset=0):
+    async with aiosqlite.connect(settings.DATABASE_URL) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM files WHERE is_public = 1 ORDER BY upload_date DESC LIMIT ? OFFSET ?",
+            (limit, offset)
+        ) as cursor:
             return await cursor.fetchall()
