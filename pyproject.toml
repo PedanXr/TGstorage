@@ -24,7 +24,8 @@ dependencies = [
     "aiosqlite",
     "pydantic",
     "pydantic-settings",
-    "python-telegram-bot"
+    "python-telegram-bot",
+    "python-multipart"
 ]
 
 [project.urls]
