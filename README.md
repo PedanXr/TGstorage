@@ -86,30 +86,18 @@ tgstorage
 
 You can run TG Storage Cluster entirely in a container.
 
-### 1. Build the image locally
-```bash
-docker build -t tgstorage-cluster:local .
-```
-
-### 2. Prepare config files
-Create a `.env` and `tokens.txt` in your current directory (see **Configuration** above).
-
-### 3. Run the container
-```bash
-docker run --rm -it \
-  -p 8082:8082 \
-  -v "$(pwd)/.env:/app/.env:ro" \
-  -v "$(pwd)/tokens.txt:/app/tokens.txt:ro" \
-  tgstorage-cluster:local
-```
-
 ### 4. (Optional) Run the published image from GHCR
 ```bash
-docker run --rm -it \
-  -p 8082:8082 \
-  -v "$(pwd)/.env:/app/.env:ro" \
-  -v "$(pwd)/tokens.txt:/app/tokens.txt:ro" \
-  ghcr.io/<owner>/tgstorage-cluster:latest
+services:
+    tgstorage-cluster:
+        stdin_open: true
+        tty: true
+        ports:
+            - 8082:8082
+        volumes:
+            - ./.env:/app/.env:ro
+            - ./tokens.txt:/app/tokens.txt:ro
+        image: ghcr.io/pedanxr/tgstorage-cluster:latest
 ```
 
 ---
