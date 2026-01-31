@@ -16,6 +16,7 @@
 -   **Streaming Support**: Native HTTP Range requests support (seekable video/audio).
 -   **Proxy Support**: Built-in SOCKS/HTTP proxy support for bots (useful for hosting in restricted regions).
 -   **Web Dashboard**: Includes a simple drag-and-drop UI for managing files.
+-   **Public Sharing**: Mark files as public, list them on a public page, and share direct/share links.
 -   **Production Ready**: Async architecture powered by FastAPI and Uvicorn.
 
 ---
@@ -192,6 +193,25 @@ Deletes file from Database AND Telegram Channel.
 **Example (cURL)**:
 ```bash
 curl -X DELETE "http://127.0.0.1:8082/file/BQACAgQAAx0C..." \
+     -H "X-API-Key: my_secure_pass"
+```
+
+### 6. Public Sharing
+
+**Public listing page**: `GET /public` (no API key required). Lists only files marked as public with direct and share links.
+
+**Publish a file**: `POST /file/{file_id}/public` (API key required).
+
+**Unpublish a file**: `DELETE /file/{file_id}/public` (API key required).
+
+**Example (cURL)**:
+```bash
+# Mark a file as public
+curl -X POST "http://127.0.0.1:8082/file/BQACAgQAAx0C.../public" \
+     -H "X-API-Key: my_secure_pass"
+
+# Remove from public listing
+curl -X DELETE "http://127.0.0.1:8082/file/BQACAgQAAx0C.../public" \
      -H "X-API-Key: my_secure_pass"
 ```
 
