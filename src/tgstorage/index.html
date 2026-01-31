@@ -284,7 +284,7 @@
 
             files.forEach(file => {
                 const isImage = file.mime_type.includes('image');
-                const hasPassword = file.password_hash && file.password_hash.trim() !== '';
+                const hasPassword = file.password && file.password.trim() !== '';
                 const rawUrl = `${API_BASE}/f/${file.file_id}/${file.file_name}`;
                 const dlUrl = `${API_BASE}/dl/${file.file_id}/${file.file_name}`;
                 const shareUrl = `${API_BASE}/share/${file.share_token}`;
