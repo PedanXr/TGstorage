@@ -178,7 +178,7 @@
                         <th>Preview</th>
                         <th>Filename</th>
                         <th>Size</th>
-                        <th>Views</th>
+                        <th>Expires</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -269,21 +269,41 @@
 
             files.forEach(file => {
                 const isImage = file.mime_type.includes('image');
+                const hasPassword = file.password_hash && file.password_hash.trim() !== '';
                 const rawUrl = `${API_BASE}/f/${file.file_id}/${file.file_name}`;
                 const dlUrl = `${API_BASE}/dl/${file.file_id}/${file.file_name}`;
                 const shareUrl = `${API_BASE}/share/${file.share_token}`;
+                
+                // Format expiration date
+                let expirationText = 'Never';
+                if (file.expiration_date) {
+                    try {
+                        const expDate = new Date(file.expiration_date);
+                        expirationText = expDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                    } catch (e) {
+                        expirationText = 'Invalid';
+                    }
+                }
+
+                // Preview: hide for password-protected files
+                let previewHtml;
+                if (hasPassword) {
+                    previewHtml = `<div class="p-2 border rounded bg-light text-center">🔒</div>`;
+                } else if (isImage) {
+                    previewHtml = `<img src="${rawUrl}" class="file-preview">`;
+                } else {
+                    previewHtml = `<div class="p-2 border rounded bg-light text-center">📄</div>`;
+                }
 
                 const row = `
                     <tr>
+                        <td>${previewHtml}</td>
                         <td>
-                            ${isImage ? `<img src="${rawUrl}" class="file-preview">` : `<div class="p-2 border rounded bg-light text-center">📄</div>`}
-                        </td>
-                        <td>
-                            <strong>${file.file_name}</strong><br>
+                            ${hasPassword ? '🔐 ' : ''}<strong>${file.file_name}</strong><br>
                             <small class="text-muted">${file.mime_type}</small>
                         </td>
                         <td>${(file.file_size / 1024).toFixed(1)} KB</td>
-                        <td>${file.view_count}</td>
+                        <td><small class="text-muted">${expirationText}</small></td>
                         <td>
                             <div class="btn-group">
                                 <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-primary">View</a>
