@@ -19,7 +19,8 @@ from .config import settings
 from .database import (
     add_file, get_file_by_id, delete_file_db, 
     get_file_by_share_token, increment_view_count,
-    list_files, get_stats, verify_key_db, init_db
+    list_files, get_stats, verify_key_db, init_db,
+    upsert_user_from_telegram, get_user_by_telegram_id
 )
 from .bot import cluster
 
@@ -139,6 +140,27 @@ async def verify_api_key(
     logger.error(f"Auth failed. Provided: {provided_key}")
     raise HTTPException(status_code=403, detail="Invalid API Key")
 
+def is_admin_auth(auth: str) -> bool:
+    return auth == settings.ADMIN_API_KEY.strip()
+
+def extract_telegram_id(auth: str) -> Optional[str]:
+    if auth and auth.startswith("telegram:"):
+        return auth.split(":", 1)[1]
+    return None
+
+async def ensure_approved_user(auth: str, action: str) -> None:
+    if is_admin_auth(auth):
+        return
+    telegram_id = extract_telegram_id(auth)
+    if telegram_id:
+        user = await get_user_by_telegram_id(telegram_id)
+        if not user or user["status"] != "approved":
+            raise HTTPException(status_code=403, detail=f"User not approved for {action}")
+
+async def verify_upload_access(auth: str = Depends(verify_api_key)) -> str:
+    await ensure_approved_user(auth, "uploads")
+    return auth
+
 @api.options("/{rest_of_path:path}")
 async def preflight_handler(request: Request, rest_of_path: str):
     return Response(status_code=200, headers={
@@ -166,6 +188,14 @@ async def telegram_login(request: Request, response: Response):
         raise HTTPException(status_code=400, detail="Invalid Telegram payload")
     if not verify_telegram_login(payload):
         raise HTTPException(status_code=401, detail="Telegram verification failed")
+    telegram_id = payload.get("id")
+    await upsert_user_from_telegram(
+        telegram_id=telegram_id,
+        username=payload.get("username"),
+        first_name=payload.get("first_name"),
+        last_name=payload.get("last_name"),
+    )
+    user_record = await get_user_by_telegram_id(telegram_id)
     session_token = create_session_token(payload)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -183,6 +213,7 @@ async def telegram_login(request: Request, response: Response):
             "first_name": payload.get("first_name"),
             "last_name": payload.get("last_name"),
             "photo_url": payload.get("photo_url"),
+            "status": user_record["status"] if user_record else "pending",
         },
     }
 
@@ -214,7 +245,7 @@ async def upload(
     file: UploadFile = File(...), 
     expiration_days: int = Form(None),
     password: str = Form(None),
-    auth: str = Depends(verify_api_key)
+    auth: str = Depends(verify_upload_access)
 ):
     bot = await cluster.get_healthy_bot()
     if not bot:
@@ -362,6 +393,7 @@ async def get_system_stats(auth: str = Depends(verify_api_key)):
 @api.get("/files")
 async def list_all_files(limit: int = 50, offset: int = 0, search: str = None, auth: str = Depends(verify_api_key)):
     logger.info(f"Listing files: limit={limit}, offset={offset}, search={search}")
+    await ensure_approved_user(auth, "listing files")
     files = await list_files(limit, offset, search, auth_key=auth)
     result = [dict(f) for f in files]
     logger.info(f"Found {len(result)} files")

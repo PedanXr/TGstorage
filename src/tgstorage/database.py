@@ -32,6 +32,18 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id TEXT UNIQUE,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                approved_at TIMESTAMP
+            )
+        """)
         # Insert default key if it doesn't exist
         await db.execute(
             "INSERT OR IGNORE INTO api_keys (key, owner) VALUES (?, ?)",
@@ -120,3 +132,33 @@ async def get_expired_files():
         now = datetime.datetime.now().isoformat()
         async with db.execute("SELECT * FROM files WHERE expiration_date IS NOT NULL AND expiration_date < ?", (now,)) as cursor:
             return await cursor.fetchall()
+
+async def upsert_user_from_telegram(telegram_id, username=None, first_name=None, last_name=None):
+    async with aiosqlite.connect(settings.DATABASE_URL) as db:
+        await db.execute(
+            """
+            INSERT INTO users (telegram_id, username, first_name, last_name)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(telegram_id) DO UPDATE SET
+                username = excluded.username,
+                first_name = excluded.first_name,
+                last_name = excluded.last_name
+            """,
+            (str(telegram_id), username, first_name, last_name),
+        )
+        await db.commit()
+
+async def set_user_status(telegram_id, status):
+    async with aiosqlite.connect(settings.DATABASE_URL) as db:
+        approved_at = datetime.datetime.now().isoformat() if status == "approved" else None
+        await db.execute(
+            "UPDATE users SET status = ?, approved_at = ? WHERE telegram_id = ?",
+            (status, approved_at, str(telegram_id)),
+        )
+        await db.commit()
+
+async def get_user_by_telegram_id(telegram_id):
+    async with aiosqlite.connect(settings.DATABASE_URL) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM users WHERE telegram_id = ?", (str(telegram_id),)) as cursor:
+            return await cursor.fetchone()
