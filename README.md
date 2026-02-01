@@ -18,6 +18,8 @@
 -   **Streaming Support**: Native HTTP Range requests support (seekable video/audio).
 -   **Proxy Support**: Built-in SOCKS/HTTP proxy support for bots (useful for hosting in restricted regions).
 -   **Web Dashboard**: Includes a simple drag-and-drop UI for managing files.
+-   **Telegram Account Login**: Users authenticate via Telegram before uploading.
+-   **Admin Approval Workflow**: Admins can review and approve Telegram accounts before access is granted.
 -   **Production Ready**: Async architecture powered by FastAPI and Uvicorn.
 
 ---
@@ -57,6 +59,8 @@ Create a project folder and add two files:
 # Required
 CHANNEL_ID=-100xxxxxxxxxx      # Your Channel ID
 ADMIN_API_KEY=my_secure_pass   # Master password for the API/Dashboard
+TELEGRAM_LOGIN_BOT_TOKEN=bot_token_here   # Bot token used for Telegram Login Widget verification
+TELEGRAM_LOGIN_BOT_USERNAME=YourBotName   # Bot username without @
 
 # Server Config
 HOST=0.0.0.0
@@ -108,6 +112,10 @@ services:
 
 **Base URL**: `http://your-server-ip:8082` (or your domain)
 **Authentication**: Add header `X-API-Key: your_key` or query param `?key=your_key`.
+**Telegram Login**: Users authenticate via the Telegram Login Widget. Approved users can upload; unapproved users must wait for admin confirmation.
+
+### 0. Telegram Account Login & Admin Approval
+Users authenticate with the Telegram Login Widget. The server verifies the Telegram payload signature using `TELEGRAM_LOGIN_BOT_TOKEN`, creates/updates the user record, and enforces account status. Admins can approve or block users in the admin UI before they can upload files.
 
 ### 1. Upload File
 **Endpoint**: `POST /upload`
