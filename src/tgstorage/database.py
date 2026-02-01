@@ -162,3 +162,15 @@ async def get_user_by_telegram_id(telegram_id):
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users WHERE telegram_id = ?", (str(telegram_id),)) as cursor:
             return await cursor.fetchone()
+
+async def list_users(status=None):
+    async with aiosqlite.connect(settings.DATABASE_URL) as db:
+        db.row_factory = aiosqlite.Row
+        query = "SELECT * FROM users"
+        params = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY created_at DESC"
+        async with db.execute(query, params) as cursor:
+            return await cursor.fetchall()
