@@ -69,6 +69,10 @@
             border: 1px dashed rgba(124, 58, 237, 0.5);
             background: rgba(124, 58, 237, 0.08);
         }
+        .telegram-status {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
@@ -92,10 +96,12 @@
             <div class="d-flex align-items-center justify-content-between">
                 <div>
                     <h6 class="mb-1">Telegram Login</h6>
-                    <p class="small text-muted mb-0">Requires Telegram Login Widget + Backend validation.</p>
+                    <p class="small text-muted mb-0">Authenticate with your Telegram account.</p>
                 </div>
-                <span class="badge text-bg-secondary">Coming Soon</span>
+                <span class="badge text-bg-primary">Secure</span>
             </div>
+            <div class="mt-3" id="telegram-login-widget"></div>
+            <div class="telegram-status mt-2" id="telegram-login-status">Loading Telegram login widget…</div>
         </div>
     </div>
 </div>
@@ -208,33 +214,94 @@
 <script>
     const API_BASE = window.location.origin;
     let searchTimer = null;
+    let sessionActive = false;
 
     function saveKey() {
         const key = document.getElementById('api-key').value;
         localStorage.setItem('tg_api_key', key);
-        toggleAuthState();
-        loadStats();
-        loadFiles();
+        refreshAuthState();
     }
 
     function clearKey() {
         localStorage.removeItem('tg_api_key');
-        toggleAuthState();
+        localStorage.removeItem('tg_session_token');
+        apiFetch('/auth/logout', { method: 'POST' });
+        refreshAuthState();
     }
 
     window.onload = () => {
         const savedKey = localStorage.getItem('tg_api_key');
         if (savedKey) document.getElementById('api-key').value = savedKey;
-        toggleAuthState();
+        refreshAuthState();
+        initializeTelegramLogin();
     };
 
-    function toggleAuthState() {
-        const hasKey = Boolean(localStorage.getItem('tg_api_key'));
-        document.getElementById('login-screen').classList.toggle('d-none', hasKey);
-        document.getElementById('app-shell').classList.toggle('d-none', !hasKey);
-        if (hasKey) {
+    async function refreshAuthState() {
+        sessionActive = await checkSession();
+        const hasKey = Boolean(localStorage.getItem('tg_api_key') || localStorage.getItem('tg_session_token'));
+        const hasAuth = hasKey || sessionActive;
+        document.getElementById('login-screen').classList.toggle('d-none', hasAuth);
+        document.getElementById('app-shell').classList.toggle('d-none', !hasAuth);
+        if (hasAuth) {
             loadStats();
             loadFiles();
+        }
+    }
+
+    async function checkSession() {
+        try {
+            const res = await fetch(`${API_BASE}/auth/session`, { credentials: 'include' });
+            return res.ok;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function initializeTelegramLogin() {
+        const status = document.getElementById('telegram-login-status');
+        try {
+            const res = await fetch(`${API_BASE}/auth/config`);
+            const data = await res.json();
+            if (!data.bot_username) {
+                status.textContent = 'Telegram login is not configured.';
+                return;
+            }
+            const widgetScript = document.createElement('script');
+            widgetScript.async = true;
+            widgetScript.src = 'https://telegram.org/js/telegram-widget.js?22';
+            widgetScript.setAttribute('data-telegram-login', data.bot_username);
+            widgetScript.setAttribute('data-size', 'large');
+            widgetScript.setAttribute('data-onauth', 'onTelegramAuth(user)');
+            widgetScript.setAttribute('data-request-access', 'write');
+            document.getElementById('telegram-login-widget').appendChild(widgetScript);
+            status.textContent = 'Use Telegram to sign in.';
+        } catch (e) {
+            status.textContent = 'Unable to load Telegram login widget.';
+        }
+    }
+
+    async function onTelegramAuth(user) {
+        const status = document.getElementById('telegram-login-status');
+        status.textContent = 'Verifying Telegram login…';
+        try {
+            const res = await fetch(`${API_BASE}/auth/telegram`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(user)
+            });
+            if (!res.ok) {
+                status.textContent = 'Telegram login failed.';
+                return;
+            }
+            const data = await res.json();
+            if (data.token) {
+                localStorage.setItem('tg_session_token', data.token);
+            }
+            status.textContent = 'Telegram login successful.';
+            refreshAuthState();
+        } catch (e) {
+            status.textContent = 'Telegram login failed.';
         }
     }
 
@@ -244,11 +311,14 @@
     }
 
     async function apiFetch(endpoint, options = {}) {
-        const key = localStorage.getItem('tg_api_key');
+        const key = localStorage.getItem('tg_api_key') || localStorage.getItem('tg_session_token');
         options.headers = {
-            ...options.headers,
-            'X-API-Key': key
+            ...options.headers
         };
+        if (key) {
+            options.headers['X-API-Key'] = key;
+        }
+        options.credentials = 'include';
         const response = await fetch(`${API_BASE}${endpoint}`, options);
         if (response.status === 403) alert("Invalid API Key!");
         return response;
@@ -423,7 +493,7 @@
         const progressBar = progressDiv.querySelector('.upload-bar');
         const progressPercent = progressDiv.querySelector('.upload-percent');
         const xhr = new XMLHttpRequest();
-        const key = localStorage.getItem('tg_api_key');
+        const key = localStorage.getItem('tg_api_key') || localStorage.getItem('tg_session_token');
 
         xhr.upload.addEventListener('progress', (e) => {
             if (e.lengthComputable) {
@@ -475,7 +545,10 @@
         });
 
         xhr.open('POST', `${API_BASE}/upload`);
-        xhr.setRequestHeader('X-API-Key', key);
+        if (key) {
+            xhr.setRequestHeader('X-API-Key', key);
+        }
+        xhr.withCredentials = true;
         xhr.send(formData);
     }
 

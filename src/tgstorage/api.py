@@ -2,6 +2,10 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Res
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from importlib import resources
+import base64
+import hashlib
+import hmac
+import json
 import os
 import secrets
 import datetime
@@ -9,6 +13,7 @@ import shutil
 import re
 import asyncio
 import logging
+import time
 from typing import List, Optional
 from .config import settings
 from .database import (
@@ -31,12 +36,96 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
+SESSION_COOKIE_NAME = "tg_session"
+SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7
+TELEGRAM_AUTH_MAX_AGE_SECONDS = 60 * 60 * 24
+
+def build_telegram_data_check_string(payload: dict) -> str:
+    entries = []
+    for key in sorted(payload.keys()):
+        if key == "hash":
+            continue
+        value = payload.get(key)
+        if value is None:
+            continue
+        entries.append(f"{key}={value}")
+    return "\n".join(entries)
+
+def verify_telegram_login(payload: dict) -> bool:
+    if not settings.TELEGRAM_LOGIN_BOT_TOKEN:
+        logger.error("Missing TELEGRAM_LOGIN_BOT_TOKEN")
+        return False
+    provided_hash = payload.get("hash")
+    if not provided_hash:
+        logger.error("Telegram payload missing hash")
+        return False
+    try:
+        auth_date = int(payload.get("auth_date", 0))
+    except (TypeError, ValueError):
+        logger.error("Invalid auth_date in Telegram payload")
+        return False
+    now = int(time.time())
+    if now - auth_date > TELEGRAM_AUTH_MAX_AGE_SECONDS:
+        logger.warning("Telegram auth_date expired: %s", auth_date)
+        return False
+    data_check_string = build_telegram_data_check_string(payload)
+    secret_key = hashlib.sha256(settings.TELEGRAM_LOGIN_BOT_TOKEN.encode()).digest()
+    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(computed_hash, provided_hash):
+        logger.warning("Telegram login hash mismatch")
+        return False
+    return True
+
+def create_session_token(payload: dict) -> str:
+    session_payload = {
+        "id": payload.get("id"),
+        "username": payload.get("username"),
+        "first_name": payload.get("first_name"),
+        "last_name": payload.get("last_name"),
+        "photo_url": payload.get("photo_url"),
+        "auth_date": payload.get("auth_date"),
+        "iat": int(time.time()),
+        "exp": int(time.time()) + SESSION_MAX_AGE_SECONDS,
+    }
+    payload_bytes = json.dumps(session_payload, separators=(",", ":"), sort_keys=True).encode()
+    payload_b64 = base64.urlsafe_b64encode(payload_bytes).rstrip(b"=").decode()
+    signature = hmac.new(settings.ADMIN_API_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+def verify_session_token(token: str) -> Optional[dict]:
+    if not token or "." not in token:
+        return None
+    payload_b64, signature = token.rsplit(".", 1)
+    expected_signature = hmac.new(settings.ADMIN_API_KEY.encode(), payload_b64.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected_signature):
+        return None
+    padding = "=" * (-len(payload_b64) % 4)
+    try:
+        payload_bytes = base64.urlsafe_b64decode(payload_b64 + padding)
+        payload = json.loads(payload_bytes.decode())
+    except (ValueError, json.JSONDecodeError):
+        return None
+    exp = payload.get("exp")
+    if exp and int(time.time()) > int(exp):
+        return None
+    return payload
+
 # Flexible Authentication
 async def verify_api_key(
     x_api_key: Optional[str] = Header(None), 
-    key: Optional[str] = Query(None)
+    key: Optional[str] = Query(None),
+    request: Request = None
 ):
     provided_key = (x_api_key or key or "").strip()
+    if not provided_key and request is not None:
+        session_token = request.cookies.get(SESSION_COOKIE_NAME)
+        session_payload = verify_session_token(session_token)
+        if session_payload:
+            return f"telegram:{session_payload.get('id')}"
+    if provided_key:
+        session_payload = verify_session_token(provided_key)
+        if session_payload:
+            return f"telegram:{session_payload.get('id')}"
     if not provided_key:
         logger.error("No API key provided")
         raise HTTPException(status_code=403, detail="API Key required")
@@ -57,6 +146,50 @@ async def preflight_handler(request: Request, rest_of_path: str):
         "Access-Control-Allow-Methods": "*",
         "Access-Control-Allow-Headers": "*",
     })
+
+@api.get("/auth/config")
+async def get_auth_config():
+    return {"bot_username": settings.TELEGRAM_LOGIN_BOT_USERNAME}
+
+@api.get("/auth/session")
+async def get_auth_session(request: Request):
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    session_payload = verify_session_token(session_token)
+    if not session_payload:
+        raise HTTPException(status_code=401, detail="No active session")
+    return {"status": "ok", "user": session_payload}
+
+@api.post("/auth/telegram")
+async def telegram_login(request: Request, response: Response):
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid Telegram payload")
+    if not verify_telegram_login(payload):
+        raise HTTPException(status_code=401, detail="Telegram verification failed")
+    session_token = create_session_token(payload)
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        samesite="lax",
+    )
+    return {
+        "status": "ok",
+        "token": session_token,
+        "user": {
+            "id": payload.get("id"),
+            "username": payload.get("username"),
+            "first_name": payload.get("first_name"),
+            "last_name": payload.get("last_name"),
+            "photo_url": payload.get("photo_url"),
+        },
+    }
+
+@api.post("/auth/logout")
+async def telegram_logout(response: Response):
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    return {"status": "ok"}
 
 @api.get("/", response_class=HTMLResponse)
 async def get_dashboard():

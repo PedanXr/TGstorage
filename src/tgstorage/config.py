@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     
     # Security
     ADMIN_API_KEY: str = "DEFAULT_INSECURE_KEY"
+    TELEGRAM_LOGIN_BOT_TOKEN: str = ""
+    TELEGRAM_LOGIN_BOT_USERNAME: str = ""
     
     # Server
     DATABASE_URL: str = "storage.db"
