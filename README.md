@@ -39,6 +39,13 @@
 3.  **Tip**: Create at least 3-5 bots for better performance.
 4.  Save the **API Token** for each bot.
 
+### 2.1 Enable Telegram Login Widget
+To allow users to log in with Telegram, you must configure the Login Widget for a bot:
+1.  Open [@BotFather](https://t.me/BotFather) and run `/setdomain`.
+2.  Select the bot you want to use for the Login Widget.
+3.  Enter your public domain (e.g. `storage.your-domain.com`). For local testing, use a tunnel like `ngrok` and set the generated domain.
+4.  Save the bot username (without `@`) as `TELEGRAM_LOGIN_BOT_USERNAME` and the bot token as `TELEGRAM_LOGIN_BOT_TOKEN`.
+
 ### 3. Create a Storage Channel
 1.  Create a **Private Channel** in Telegram.
 2.  Add **ALL** your bots as **Administrators** to this channel (needed to upload files).
@@ -103,8 +110,10 @@ services:
         volumes:
             - ./.env:/app/.env:ro
             - ./tokens.txt:/app/tokens.txt:ro
+            - ./storage.db:/app/storage.db
         image: ghcr.io/pedanxr/tgstorage-cluster:latest
 ```
+> **Note:** If you don't mount `storage.db`, the database will be ephemeral inside the container and you will lose users/files metadata after restarts.
 
 ---
 
