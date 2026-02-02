@@ -18,6 +18,8 @@
 -   **Streaming Support**: Native HTTP Range requests support (seekable video/audio).
 -   **Proxy Support**: Built-in SOCKS/HTTP proxy support for bots (useful for hosting in restricted regions).
 -   **Web Dashboard**: Includes a simple drag-and-drop UI for managing files.
+-   **Telegram Account Login**: Users authenticate via Telegram before uploading.
+-   **Admin Approval Workflow**: Admins can review and approve Telegram accounts before access is granted.
 -   **Production Ready**: Async architecture powered by FastAPI and Uvicorn.
 
 ---
@@ -36,6 +38,13 @@
 2.  Create new bots using `/newbot`.
 3.  **Tip**: Create at least 3-5 bots for better performance.
 4.  Save the **API Token** for each bot.
+
+### 2.1 Enable Telegram Login Widget
+To allow users to log in with Telegram, you must configure the Login Widget for a bot:
+1.  Open [@BotFather](https://t.me/BotFather) and run `/setdomain`.
+2.  Select the bot you want to use for the Login Widget.
+3.  Enter your public domain (e.g. `storage.your-domain.com`). For local testing, use a tunnel like `ngrok` and set the generated domain.
+4.  Save the bot username (without `@`) as `TELEGRAM_LOGIN_BOT_USERNAME` and the bot token as `TELEGRAM_LOGIN_BOT_TOKEN`.
 
 ### 3. Create a Storage Channel
 1.  Create a **Private Channel** in Telegram.
@@ -57,6 +66,8 @@ Create a project folder and add two files:
 # Required
 CHANNEL_ID=-100xxxxxxxxxx      # Your Channel ID
 ADMIN_API_KEY=my_secure_pass   # Master password for the API/Dashboard
+TELEGRAM_LOGIN_BOT_TOKEN=bot_token_here   # Bot token used for Telegram Login Widget verification
+TELEGRAM_LOGIN_BOT_USERNAME=YourBotName   # Bot username without @
 
 # Server Config
 HOST=0.0.0.0
@@ -99,8 +110,10 @@ services:
         volumes:
             - ./.env:/app/.env:ro
             - ./tokens.txt:/app/tokens.txt:ro
+            - ./storage.db:/app/storage.db
         image: ghcr.io/pedanxr/tgstorage-cluster:latest
 ```
+> **Note:** If you don't mount `storage.db`, the database will be ephemeral inside the container and you will lose users/files metadata after restarts.
 
 ---
 
@@ -108,6 +121,10 @@ services:
 
 **Base URL**: `http://your-server-ip:8082` (or your domain)
 **Authentication**: Add header `X-API-Key: your_key` or query param `?key=your_key`.
+**Telegram Login**: Users authenticate via the Telegram Login Widget. Approved users can upload; unapproved users must wait for admin confirmation.
+
+### 0. Telegram Account Login & Admin Approval
+Users authenticate with the Telegram Login Widget. The server verifies the Telegram payload signature using `TELEGRAM_LOGIN_BOT_TOKEN`, creates/updates the user record, and enforces account status. Admins can approve or block users in the admin UI before they can upload files.
 
 ### 1. Upload File
 **Endpoint**: `POST /upload`

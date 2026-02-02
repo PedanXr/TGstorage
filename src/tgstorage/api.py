@@ -179,7 +179,11 @@ async def get_auth_session(request: Request):
     session_payload = verify_session_token(session_token)
     if not session_payload:
         raise HTTPException(status_code=401, detail="No active session")
-    return {"status": "ok", "user": session_payload}
+    user_record = await get_user_by_telegram_id(session_payload.get("id"))
+    user_data = dict(session_payload)
+    if user_record:
+        user_data["status"] = user_record["status"]
+    return {"status": "ok", "user": user_data}
 
 @api.post("/auth/telegram")
 async def telegram_login(request: Request, response: Response):

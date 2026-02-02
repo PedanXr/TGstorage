@@ -90,7 +90,7 @@
                 <input type="password" id="api-key" class="form-control" placeholder="Admin or User API Key">
                 <button class="btn btn-primary" onclick="saveKey()">Sign In</button>
             </div>
-            <small class="text-muted">API Key is required before content can be displayed.</small>
+            <small class="text-muted">Use an API key or sign in with Telegram below.</small>
         </div>
         <div class="telegram-placeholder p-3">
             <div class="d-flex align-items-center justify-content-between">
@@ -121,6 +121,9 @@
     </div>
 
     <div class="card mb-4 p-4">
+        <div id="approval-status" class="alert alert-warning d-none mb-3" role="alert">
+            Your Telegram account is pending approval. Uploads will be enabled once an admin approves your account.
+        </div>
         <h4 class="mb-3">Upload New File</h4>
         <div id="drop-zone" onclick="document.getElementById('file-input').click()">
             <p id="drop-text" class="mb-2">Drag & Drop files here or click to browse</p>
@@ -214,6 +217,7 @@
 <script>
     const API_BASE = window.location.origin;
     let searchTimer = null;
+    let currentAuthStatus = null;
     let sessionActive = false;
 
     function saveKey() {
@@ -225,6 +229,7 @@
     function clearKey() {
         localStorage.removeItem('tg_api_key');
         localStorage.removeItem('tg_session_token');
+        currentAuthStatus = null;
         apiFetch('/auth/logout', { method: 'POST' });
         refreshAuthState();
     }
@@ -245,6 +250,7 @@
         if (hasAuth) {
             loadStats();
             loadFiles();
+            await refreshApprovalStatus();
         }
     }
 
@@ -298,11 +304,33 @@
             if (data.token) {
                 localStorage.setItem('tg_session_token', data.token);
             }
-            status.textContent = 'Telegram login successful.';
+            if (data.user && data.user.status === 'pending') {
+                status.textContent = 'Telegram login successful. Waiting for admin approval.';
+            } else {
+                status.textContent = 'Telegram login successful.';
+            }
             refreshAuthState();
         } catch (e) {
             status.textContent = 'Telegram login failed.';
         }
+    }
+
+    async function refreshApprovalStatus() {
+        try {
+            const res = await apiFetch('/auth/session');
+            if (!res.ok) {
+                currentAuthStatus = null;
+            } else {
+                const data = await res.json();
+                currentAuthStatus = data.user?.status || null;
+            }
+        } catch (e) {
+            currentAuthStatus = null;
+        }
+        const approvalAlert = document.getElementById('approval-status');
+        const isPending = currentAuthStatus === 'pending';
+        approvalAlert.classList.toggle('d-none', !isPending);
+        document.getElementById('upload-button').disabled = isPending || !selectedFile;
     }
 
     function scheduleSearch() {
@@ -320,7 +348,14 @@
         }
         options.credentials = 'include';
         const response = await fetch(`${API_BASE}${endpoint}`, options);
-        if (response.status === 403) alert("Invalid API Key!");
+        if (response.status === 403) {
+            try {
+                const data = await response.clone().json();
+                alert(data.detail || "Unauthorized.");
+            } catch (e) {
+                alert("Unauthorized.");
+            }
+        }
         return response;
     }
 
@@ -435,7 +470,8 @@
         document.getElementById('selected-filename').textContent = file.name;
         document.getElementById('selected-filesize').textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
         document.getElementById('selected-file-info').classList.remove('d-none');
-        document.getElementById('upload-button').disabled = false;
+        const isPending = currentAuthStatus === 'pending';
+        document.getElementById('upload-button').disabled = isPending;
         document.getElementById('cancel-button').disabled = false;
     }
 
@@ -531,7 +567,12 @@
                 }
                 setTimeout(() => progressDiv.remove(), 8000);
             } else if (xhr.status === 403) {
-                progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Invalid API Key!</div>`;
+                let detail = 'Unauthorized.';
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    detail = data.detail || detail;
+                } catch (e) {}
+                progressDiv.innerHTML = `<div class="alert alert-danger mb-0">${detail}</div>`;
                 setTimeout(() => progressDiv.remove(), 5000);
             } else {
                 progressDiv.innerHTML = `<div class="alert alert-danger mb-0">Upload failed: ${xhr.status}</div>`;
