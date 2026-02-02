@@ -114,6 +114,7 @@
                 <p class="mb-0 text-white-50">Quick access to uploads, views and shares.</p>
             </div>
             <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span id="admin-badge" class="badge text-bg-warning d-none">Admin</span>
                 <button class="btn btn-light action-pill" onclick="clearKey()">Sign Out</button>
                 <button class="btn btn-outline-light action-pill" onclick="loadFiles()">🔄 Refresh</button>
             </div>
@@ -184,6 +185,41 @@
         </div>
     </div>
 
+    <div class="card p-4 mb-4 d-none" id="admin-section">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+            <div>
+                <h4 class="mb-1">Admin: User Approvals</h4>
+                <p class="text-muted small mb-0">Pending Telegram users require approval before uploads.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <label class="form-label mb-0 small text-muted" for="admin-status-filter">Filter</label>
+                <select id="admin-status-filter" class="form-select form-select-sm" onchange="loadAdminUsers()">
+                    <option value="pending" selected>Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="">All</option>
+                </select>
+            </div>
+        </div>
+        <div id="admin-users-alert" class="small text-muted mb-3 d-none"></div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Telegram ID</th>
+                        <th>User</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="admin-users-tbody">
+                    <!-- Loaded dynamically -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <div class="card p-4">
         <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
             <div>
@@ -219,6 +255,7 @@
     let searchTimer = null;
     let currentAuthStatus = null;
     let sessionActive = false;
+    let adminAccess = false;
 
     function saveKey() {
         const key = document.getElementById('api-key').value;
@@ -250,7 +287,9 @@
         if (hasAuth) {
             loadStats();
             loadFiles();
-            await refreshApprovalStatus();
+            loadAdminUsers();
+        } else {
+            setAdminVisibility(false);
         }
     }
 
@@ -438,6 +477,93 @@
                 tbody.innerHTML += row;
             });
         } catch (e) {}
+    }
+
+    function setAdminVisibility(isVisible) {
+        adminAccess = isVisible;
+        document.getElementById('admin-section').classList.toggle('d-none', !isVisible);
+        document.getElementById('admin-badge').classList.toggle('d-none', !isVisible);
+    }
+
+    function formatAdminUserName(user) {
+        const nameParts = [user.first_name, user.last_name].filter(Boolean).join(' ');
+        const username = user.username ? `@${user.username}` : '';
+        const displayName = nameParts || username || '—';
+        return `${displayName}${username && nameParts ? ` (${username})` : ''}`;
+    }
+
+    function formatAdminDate(value) {
+        if (!value) return '—';
+        try {
+            const date = new Date(value);
+            return date.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (e) {
+            return '—';
+        }
+    }
+
+    function statusBadge(status) {
+        const normalized = status || 'pending';
+        if (normalized === 'approved') return '<span class="badge text-bg-success">Approved</span>';
+        if (normalized === 'blocked') return '<span class="badge text-bg-danger">Blocked</span>';
+        return '<span class="badge text-bg-warning">Pending</span>';
+    }
+
+    async function loadAdminUsers() {
+        const filter = document.getElementById('admin-status-filter')?.value ?? 'pending';
+        const query = filter ? `?status=${encodeURIComponent(filter)}` : '';
+        const res = await apiFetch(`/admin/users${query}`);
+        if (res.status === 403 || res.status === 401) {
+            setAdminVisibility(false);
+            return;
+        }
+        if (!res.ok) {
+            setAdminVisibility(true);
+            const alertBox = document.getElementById('admin-users-alert');
+            alertBox.textContent = `Unable to load admin users (${res.status}).`;
+            alertBox.classList.remove('d-none');
+            return;
+        }
+        setAdminVisibility(true);
+        const users = await res.json();
+        const tbody = document.getElementById('admin-users-tbody');
+        const alertBox = document.getElementById('admin-users-alert');
+        alertBox.classList.add('d-none');
+        tbody.innerHTML = '';
+
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No users found for this filter.</td></tr>';
+            return;
+        }
+
+        users.forEach(user => {
+            const approveDisabled = user.status === 'approved';
+            const blockDisabled = user.status === 'blocked';
+            const row = `
+                <tr>
+                    <td><code>${user.telegram_id}</code></td>
+                    <td>${formatAdminUserName(user)}</td>
+                    <td>${statusBadge(user.status)}</td>
+                    <td>${formatAdminDate(user.created_at)}</td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-success" onclick="updateUserStatus('${user.telegram_id}', 'approve')" ${approveDisabled ? 'disabled' : ''}>Approve</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="updateUserStatus('${user.telegram_id}', 'block')" ${blockDisabled ? 'disabled' : ''}>Block</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        });
+    }
+
+    async function updateUserStatus(telegramId, action) {
+        const res = await apiFetch(`/admin/users/${telegramId}/${action}`, { method: 'POST' });
+        if (!res.ok) {
+            alert(`Failed to update user (${res.status}).`);
+            return;
+        }
+        loadAdminUsers();
     }
 
     async function debugDB() {

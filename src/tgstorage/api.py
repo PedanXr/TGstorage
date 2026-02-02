@@ -20,7 +20,7 @@ from .database import (
     add_file, get_file_by_id, delete_file_db, 
     get_file_by_share_token, increment_view_count,
     list_files, get_stats, verify_key_db, init_db,
-    upsert_user_from_telegram, get_user_by_telegram_id
+    upsert_user_from_telegram, get_user_by_telegram_id, list_users, set_user_status
 )
 from .bot import cluster
 
@@ -159,6 +159,11 @@ async def ensure_approved_user(auth: str, action: str) -> None:
 
 async def verify_upload_access(auth: str = Depends(verify_api_key)) -> str:
     await ensure_approved_user(auth, "uploads")
+    return auth
+
+async def verify_admin(auth: str = Depends(verify_api_key)) -> str:
+    if not is_admin_auth(auth):
+        raise HTTPException(status_code=403, detail="Admin access required")
     return auth
 
 @api.options("/{rest_of_path:path}")
@@ -402,6 +407,29 @@ async def list_all_files(limit: int = 50, offset: int = 0, search: str = None, a
     result = [dict(f) for f in files]
     logger.info(f"Found {len(result)} files")
     return result
+
+@api.get("/admin/users")
+async def list_admin_users(status: Optional[str] = Query(None), auth: str = Depends(verify_admin)):
+    users = await list_users(status=status)
+    return [dict(u) for u in users]
+
+@api.post("/admin/users/{telegram_id}/approve")
+async def approve_admin_user(telegram_id: str, auth: str = Depends(verify_admin)):
+    user = await get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    await set_user_status(telegram_id, "approved")
+    updated = await get_user_by_telegram_id(telegram_id)
+    return {"status": "ok", "user": dict(updated)}
+
+@api.post("/admin/users/{telegram_id}/block")
+async def block_admin_user(telegram_id: str, auth: str = Depends(verify_admin)):
+    user = await get_user_by_telegram_id(telegram_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    await set_user_status(telegram_id, "blocked")
+    updated = await get_user_by_telegram_id(telegram_id)
+    return {"status": "ok", "user": dict(updated)}
 
 @api.get("/f/{file_id}/{filename}")
 @api.get("/dl/{file_id}/{filename}")
